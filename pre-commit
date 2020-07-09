@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+"""
+pre-commit hook for check python codes with pylint
+"""
+
+# pylint: disable=C0103
+
+import collections
+import subprocess
+
+try:
+  import magic
+except ImportError as error:
+  raise SystemExit(error)
+
+ExecutionResult = collections.namedtuple("ExecutionResult",
+                                         "status, stdout, stderr")
+
+def _execute(command):
+  """
+  Execute a command and return result.
+  """
+  process = subprocess.Popen(command, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE)
+
+  stdout, stderr = process.communicate()
+  status = process.poll()
+  return ExecutionResult(status, stdout.decode("utf-8"),
+                         stderr.decode("utf-8"))
+
+def get_files():
+  """
+  Find staged files.
+  """
+  command = "git diff-index --cached --name-only HEAD"
+  result = _execute(command.split())
+  if result.status:
+    get_files_error = "".join(result.stderr)
+    raise SystemExit(get_files_error)
+  return result.stdout.split()
+
+def pylint_check():
+  """
+  Check python staged file with pylint.
+  """
+  is_commitable = 0
+  files = get_files()
+  for current_file in files:
+    file_type = magic.from_file(current_file)
+    is_python_file = bool("Python" in file_type)
+    if current_file.endswith(".py") or is_python_file:
+      result = _execute(["python", "-m", "pylint", "--reports=n", current_file])
+      if result.status:
+        print(current_file)
+        print(result.stdout)
+        print(result.stderr)
+        is_commitable = -1
+  return is_commitable
+
+IS_COMMITABLE = 0
+IS_COMMITABLE = pylint_check()
+raise SystemExit(IS_COMMITABLE)
